@@ -1,0 +1,85 @@
+FROM ubuntu:focal-20230308
+
+# STEP1 tools
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Tokyo \
+    apt-get --yes -qq install \
+    git \
+    wget \
+    curl \
+    ca-certificates \
+    vim \
+    graphviz \
+    firefox \
+    vim nano sudo \
+    curl wget zsh htop \
+    cmake gdb graphviz \
+    gcc libtool autoconf automake make tmux \
+    zlib1g-dev locales parallel\
+    libgtest-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# STEP2 python3
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    apt-get --yes -qq install python3 python3-venv && \
+    python3 -m venv /venv && \
+    /venv/bin/pip install numpy==1.24.2 matplotlib==3.7.1
+
+
+
+# STEP3 racket8.3
+RUN wget https://download.racket-lang.org/installers/8.3/racket-8.3-x86_64-linux-cs.sh && \
+    bash racket-8.3-x86_64-linux-cs.sh --in-place --dest /usr/local/racket && \
+    rm racket-8.3-x86_64-linux-cs.sh && \
+    echo "export PATH=$PATH:/usr/local/racket/bin" >> /home/$(id -un)/.bashrc
+
+
+# STEP4 rosette newest version at the time
+RUN git clone https://github.com/emina/rosette.git && \
+    cd rosette && git checkout 15647f24b4b942e5eaae19a8ec0fcd272ce7504f && cd .. && \
+    /usr/racket/bin/raco pkg install --no-docs --copy --auto -i -t dir rosette && \
+    rm -rf rosette
+
+
+# STEP5 boolector 3.2.2
+RUN DEBIAN_FRONTEND=noninteractive \
+  apt-get --yes -qq install \
+    make \
+    cmake \
+    gcc \
+    g++
+RUN wget https://github.com/Boolector/boolector/archive/refs/tags/3.2.2.tar.gz && \
+    tar -zxvf 3.2.2.tar.gz && \
+    cd boolector-3.2.2 && \
+    ./contrib/setup-lingeling.sh && \
+    ./contrib/setup-btor2tools.sh && \
+    ./configure.sh --prefix /usr/boolector && cd build && make -j8 && make install && \
+    cd ../.. && rm -rf 3.2.2.tar.gz  boolector-3.2.2 && \
+    echo "export PATH=$PATH:/usr/boolector/bin" >> /home/$(id -un)/.bashrc
+
+
+# STEP6 DASK
+RUN /venv/bin/pip install "dask[complete]"==2023.3.1
+
+# RUN python3 -m pip install "dask[complete]"==2023.3.1
+
+
+# User/group names/ids which will be overwritten: https://stackoverflow.com/a/44683248
+ARG UNAME
+ARG GNAME
+ARG UID
+ARG GID
+RUN groupadd -g $GID -o $GNAME
+# Add a user with empty password in sudo: https://unix.stackexchange.com/a/472968
+RUN useradd -m -u $UID -g $GID -o -s /bin/bash $UNAME && echo "$UNAME:U6aMy0wojraho" | chpasswd -e && usermod -aG sudo $UNAME
+
+# Set the user (for subsequent commands)
+USER $UNAME
+
+# Set the working directory (for subsequent commands)
+WORKDIR /home/$UNAME
+
+# Run when the container launches
+CMD /bin/bash
